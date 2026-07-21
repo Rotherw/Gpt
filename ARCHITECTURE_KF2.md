@@ -2,384 +2,481 @@
 
 - Nazwa repozytorium: Gpt
 - Aktywna gałąź: main
-- Data analizy: 2026-07-20
-- Zakres analizy: wyłącznie pliki obecne w repozytorium lokalnym; bez instalacji zależności, uruchamiania buildów ani modyfikacji kodu
-- Krótkie podsumowanie stanu projektu: repozytorium nie zawiera kodu źródłowego projektu, plików projektu, konfiguracji generatora ani zasobów związanych z Killing Floor 2. Obecnie jest to stan bardzo wczesny lub puste repozytorium z metadanymi Git.
-- Znaleziono działający generator środowisk: Nie
+- Data analizy: 2026-07-21
+- Zakres analizy: aktualne pliki repozytorium, w szczególności pakiet `src/kf2_env_generator`, `examples`, `tests` i `pyproject.toml`; bez instalowania nowych zależności i bez uruchamiania buildów
+- Krótkie podsumowanie stanu projektu: repozytorium zawiera już działający minimalny generator środowisk w Pythonie. Generator wczytuje JSON z opisem projektu, buduje model danych, waliduje odniesienia między encjami i zapisuje znormalizowany JSON wyjściowy. Nie ma jeszcze integracji z Killing Floor 2 ani z KF2 SDK.
+- Znaleziono działający generator środowisk: Tak, w zakresie generowania i walidacji projektu JSON
 - Znaleziono rzeczywistą integrację z KF2 lub KF2 SDK: Nie
 
 ## 1. Cel i zakres projektu
 
 ### Stan obecny
-- Repozytorium nie zawiera aktualnego projektu aplikacji ani narzędzia do generowania map lub środowisk.
-- Nie znaleziono skryptów, modułów, modeli danych ani konfiguracji odpowiadających za mapy, lokacje, obiekty, eksport lub integrację z KF2.
-- Nie znaleziono świadomie istniejących plików takich jak README, AGENTS.md, CONTRIBUTING, docs ani konfiguracji projektu.
+- Obecny system służy do opisu i wygenerowania prostego projektu środowiska w JSON.
+- Główny przepływ obejmuje: wczytanie JSON, walidację podstawową, serializację modelu do znormalizowanego JSON.
+- Projekt obsługuje: pomieszczenia, ściany, dekoracje, światła i punkty startowe.
+- W repozytorium nie ma jeszcze geometrii silnikowej, navmesh, eksportu do KF2 ani warstwy integracyjnej z SDK.
+- Jedynym wejściem użytkownika jest plik JSON projektu przekazany do CLI.
 
 ### Nieustalone
-- Nie da się ustalić, czy projekt miał istnieć wcześniej w innym repozytorium lub gałęzi, ponieważ aktualny stan Git nie zawiera żadnych commitów z plikami projektu.
-- Nie da się ustalić intencji autora projektu na podstawie samego repozytorium.
+- Nieustalone jest, czy ten minimalny generator jest zalążkiem większego narzędzia, czy osobnym, celowo uproszczonym komponentem.
+- Nieustalone są zasady jednostek i pełna semantyka współrzędnych, bo kod operuje wyłącznie na liczbach i nie opisuje skali świata.
 
 ### Rekomendowana architektura
-- Dla przyszłego generatora środowisk zgodnego z KF2 należy założyć osobny system do modelowania map, konfiguracji sceny, walidacji, eksportu i integracji z KF2 SDK. Ta część jest opisana osobno w sekcji 15.
+- W przyszłości system powinien rozdzielać model domenowy, generowanie geometrii, rozmieszczanie obiektów, walidację i eksport do KF2 jako osobne warstwy.
 
 ## 2. Struktura katalogów
 
 ### Stan obecny
 ```text
 Gpt/
-└── .git/                  # metadane repozytorium Git
+├── ARCHITECTURE_KF2.md        # dokument architektury
+├── examples/                  # przykładowe dane wejściowe
+│   └── sample_project.json
+├── pyproject.toml             # metadane pakietu i konfiguracja build systemu
+├── src/
+│   └── kf2_env_generator/     # pakiet generatora
+│       ├── __init__.py
+│       ├── __main__.py
+│       ├── cli.py
+│       ├── config.py
+│       ├── generator.py
+│       ├── models.py
+│       └── validation.py
+└── tests/
+    └── test_pipeline.py       # test end-to-end uruchamiany jako proces CLI
 ```
 
 ### Opis najważniejszych elementów
-- [.git](.git) — katalog Git z historią repozytorium, konfiguracją i metadanymi; nie zawiera plików projektowych w aktualnym stanie.
+- [pyproject.toml](pyproject.toml) — deklaruje build system `setuptools`, nazwę pakietu, wersję i minimalną wersję Pythona.
+- [src/kf2_env_generator/models.py](src/kf2_env_generator/models.py) — definicje obiektów domenowych projektu.
+- [src/kf2_env_generator/config.py](src/kf2_env_generator/config.py) — parser JSON i podstawowa walidacja składni i typów wejścia.
+- [src/kf2_env_generator/validation.py](src/kf2_env_generator/validation.py) — walidacja relacji między encjami i wymaganych pól semantycznych.
+- [src/kf2_env_generator/generator.py](src/kf2_env_generator/generator.py) — zapis znormalizowanego JSON wyjściowego.
+- [src/kf2_env_generator/cli.py](src/kf2_env_generator/cli.py) — punkt wejścia CLI łączący parser, walidację i eksport.
+- [examples/sample_project.json](examples/sample_project.json) — przykładowy, działający plik wejściowy.
+- [tests/test_pipeline.py](tests/test_pipeline.py) — test procesu end-to-end uruchamiający CLI jako podproces.
 
 ### Nieustalone
-- Brak katalogów źródłowych, testów, dokumentacji projektowej lub danych wejściowych.
+- Nie ma katalogów dla zasobów silnikowych, map KF2, importów SDK ani build artefaktów przeznaczonych do wersjonowania.
 
 ## 3. Moduły systemu
 
 ### Stan obecny
-Nie znaleziono rzeczywistych modułów aplikacji.
 
-Można wskazać jedynie:
-- metadane Git jako warstwę kontroli wersji,
-- brak komponentów aplikacyjnych, generatora map, eksportera, walidatora lub integracji z KF2.
+#### `src/kf2_env_generator/models.py`
+- Odpowiedzialność: model domenowy projektu.
+- Wejście: obiekty tworzone przez parser JSON.
+- Wyjście: dataclassowe reprezentacje używane przez walidację i generator.
+- Format danych: `Room`, `Wall`, `SpawnPoint`, `Decoration`, `Light`, `EnvironmentProject`.
+- Zależności: korzysta wyłącznie z biblioteki standardowej (`dataclasses`, `typing`).
+- Skutek awarii: brak modelu uniemożliwia dalsze etapy pipeline’u.
+
+#### `src/kf2_env_generator/config.py`
+- Odpowiedzialność: odczyt JSON i budowa modelu projektu.
+- Wejście: ścieżka do pliku JSON.
+- Wyjście: `EnvironmentProject`.
+- Format danych: JSON z kluczami `name`, `rooms`, `spawn_points`, `decorations`, `lights`.
+- Najważniejsze funkcje: `load_project()`, `_is_coordinate_pair()`.
+- Obsługa błędów: `ConfigError` dla braków, nieprawidłowych typów i niepoprawnych współrzędnych.
+- Zależności: `models.py`.
+
+#### `src/kf2_env_generator/validation.py`
+- Odpowiedzialność: walidacja spójności modelu.
+- Wejście: `EnvironmentProject`.
+- Wyjście: brak wartości zwracanej; sukces oznacza brak wyjątku.
+- Najważniejsza funkcja: `validate_project()`.
+- Obsługa błędów: `ValidationError`.
+- Zależności: `models.py`.
+
+#### `src/kf2_env_generator/generator.py`
+- Odpowiedzialność: serializacja modelu do znormalizowanego JSON.
+- Wejście: `EnvironmentProject` i ścieżka wyjściowa.
+- Wyjście: plik JSON oraz zwrócona ścieżka `Path`.
+- Najważniejsza funkcja: `generate_project()`.
+- Obsługa błędów: `GenerationError` przy braku pomieszczeń.
+- Zależności: `models.py`.
+- Skutek awarii: brak pliku wyjściowego lub zapis niekompletnego projektu.
+
+#### `src/kf2_env_generator/cli.py`
+- Odpowiedzialność: spina parser, walidację i generator w jeden proces CLI.
+- Wejście: dwa argumenty pozycyjne `input_path` i `output_path`.
+- Wyjście: komunikat na stdout i kod wyjścia `0` przy sukcesie.
+- Obsługa błędów: `parser.exit(1, ...)` dla błędów konfiguracji, walidacji i generowania.
+- Zależności: `config.py`, `validation.py`, `generator.py`.
+
+#### `src/kf2_env_generator/__main__.py`
+- Odpowiedzialność: umożliwia uruchomienie pakietu przez `python -m kf2_env_generator`.
+- Zależności: `cli.py`.
+
+#### `tests/test_pipeline.py`
+- Odpowiedzialność: test uruchamiający CLI jako podproces.
+- Wejście: [examples/sample_project.json](examples/sample_project.json).
+- Wyjście: oczekiwany plik JSON generowany w katalogu tymczasowym.
+- Uwaga: plik odwołuje się do `os.name`, ale nie importuje `os`; test w obecnej postaci wymaga poprawki, aby być w pełni uruchamialny.
 
 ### Nieustalone
-- Nie da się zidentyfikować żadnych klas, funkcji ani modułów implementujących logikę generowania środowiska.
+- Nie ma jeszcze podziału na osobne moduły dla geometrii, kolizji, nawigacji, eksportu KF2 ani rejestru zasobów.
 
 ### Rekomendowana architektura
-- Przyszła architektura powinna być podzielona na osobne moduły, opisane w sekcji 15.
+- Obecny podział jest prosty i liniowy, dlatego dalsza rozbudowa powinna zachować separację modelu, parsera, walidacji, generatora i warstwy integracyjnej KF2.
 
 ## 4. Dane wejściowe
 
 ### Stan obecny
-- Nie znaleziono definicji danych wejściowych generatora.
-- Nie znaleziono plików JSON, YAML, XML, CSV ani innych formatów opisu mapy lub środowiska.
-- Nie znaleziono przykładowych konfiguracji.
+- Jedynym obsługiwanym formatem wejścia jest JSON.
+- Format wejściowy jest zdefiniowany przez [examples/sample_project.json](examples/sample_project.json) i implementację w [src/kf2_env_generator/config.py](src/kf2_env_generator/config.py).
+- Wymagane pola projektu: `name` oraz co najmniej jeden element w `rooms` dla późniejszego generowania.
+- Wymagane pola pokoju: `id`, `name`, `width`, `height`, `depth`.
+- Opcjonalne pola pokoju: `walls`, `decorations`, `lights`.
+- Wymagane pola ściany: `start`, `end`; opcjonalne `height` z domyślną wartością `256.0`.
+- Wymagane pola punktu startowego, dekoracji i światła: `id`, `room_id`, współrzędne, a dla dekoracji i świateł także `name`.
+- Opcjonalne pole światła: `intensity` z domyślną wartością `1.0`.
+- `room.decorations` i `room.lights` są przechowywane jako listy identyfikatorów, ale nie są wiązane z obiektami top-level podczas walidacji.
 
 ### Nieustalone
-- Nie da się ustalić, jak miały wyglądać dane wejściowe dla generatora, ponieważ nie ma ich w repozytorium.
+- Nie ma osobnego schematu JSON Schema ani YAML, więc formalna specyfikacja formatu nie istnieje poza kodem i przykładem.
+- Nieustalone są jednostki, skala i konwencja osi świata; kod zachowuje liczby, ale ich znaczenie nie jest opisane.
 
 ### Rekomendowana architektura
-- W przyszłości dane wejściowe powinny być opisywane w jednym, dobrze zdefiniowanym formacie, np. JSON lub YAML, z osobnymi sekcjami dla:
-  - geometrii pomieszczeń,
-  - obiektów dekoracyjnych,
-  - punktów startowych,
-  - spawnu przeciwników,
-  - ustawień światła i kolizji,
-  - ustawień eksportu.
+- Jeśli format ma rosnąć, warto dodać osobny schemat wejściowy, wersjonowanie formatu i walidację schematową przed budową modelu domenowego.
 
 ## 5. Przepływ generowania środowiska
 
 ### Stan obecny
-Rzeczywisty przepływ obecnego repozytorium kończy się na samym istnieniu metadanych Git. Nie ma żadnego procesu:
-- wejścia danych,
-- konfiguracji,
-- modelowania mapy,
-- generowania geometrii,
-- rozmieszczania elementów,
-- walidacji,
-- eksportu,
-- uruchomienia w KF2.
+Rzeczywisty przepływ wygląda następująco:
+1. użytkownik uruchamia `python -m kf2_env_generator` lub `python -m kf2_env_generator.cli`,
+2. `cli.py` wywołuje `load_project()` z `config.py`,
+3. `config.py` parsuje JSON i buduje `EnvironmentProject`,
+4. `validation.py` sprawdza spójność referencji i podstawowe warunki,
+5. `generator.py` serializuje wynik do pliku JSON,
+6. CLI wypisuje ścieżkę do pliku wyjściowego.
+
+Miejsce zakończenia rzeczywistego przepływu: zapis znormalizowanego JSON. Integracja z KF2 nie istnieje.
 
 ### Diagram Mermaid — stan obecny
 ```mermaid
 flowchart LR
-    A[Repozytorium lokalne] --> B[Brak plików projektu]
-    B --> C[Brak generatora środowisk]
-    C --> D[Brak eksportu do KF2]
-    D --> E[Brak integracji z KF2 SDK]
+    A[examples/sample_project.json] --> B[config.load_project]
+    B --> C[validation.validate_project]
+    C --> D[generator.generate_project]
+    D --> E[Znormalizowany JSON wyjściowy]
+    E -. brak .-> F[Integracja z KF2 / KF2 SDK]
+
+    subgraph Istniejący przepływ
+        A --> B --> C --> D --> E
+    end
+
+    subgraph Brakująca integracja
+        F
+    end
 ```
 
 ### Nieustalone
-- Nie da się wskazać żadnego rzeczywistego etapu przetwarzania, ponieważ nie ma implementacji.
+- Nie ma jeszcze etapu budowy geometrii silnikowej, eksportu do formatu KF2 ani uruchomienia w grze.
 
 ### Rekomendowana architektura
-- Przyszły przepływ powinien być realizowany etapami:
-  1. dane wejściowe,
-  2. konfiguracja,
-  3. model mapy,
-  4. generowanie geometrii,
-  5. rozmieszczanie elementów,
-  6. walidacja,
-  7. eksport,
-  8. test lub uruchomienie w KF2.
+- Następnym krokiem powinien być oddzielny etap eksportu do formatu pośredniego, a dopiero potem warstwa mapowania do KF2 SDK.
 
 ## 6. Model mapy i formaty danych
 
 ### Stan obecny
-- Nie znaleziono modelu mapy.
-- Nie znaleziono definicji formatu lokacji, obiektu, projektu ani eksportu.
-- Nie znaleziono plików w formatach JSON, YAML, XML, CSV lub binarnych związanych z mapą.
+- Wewnętrzny model generatora znajduje się w [src/kf2_env_generator/models.py](src/kf2_env_generator/models.py).
+- Format wejściowy i wyjściowy są JSON-owe i praktycznie zbliżone do siebie.
+- W modelu występują:
+  - `EnvironmentProject` z listami `rooms`, `spawn_points`, `decorations`, `lights`,
+  - `Room` z wymiarami i listą ścian,
+  - `Wall` z parą punktów 2D i wysokością,
+  - `SpawnPoint`, `Decoration`, `Light` z pozycją 3D.
+- `generator.py` zachowuje strukturę logiczną danych, ale normalizuje wartości liczbowe do `float`.
+- Nie istnieje oddzielny format końcowy dla KF2.
+
+### Przykład z repozytorium
+Przykładowa lokacja z [examples/sample_project.json](examples/sample_project.json):
+```json
+{
+  "id": "room_01",
+  "name": "Main Hall",
+  "width": 1200,
+  "height": 400,
+  "depth": 900,
+  "walls": [
+    {"start": [0, 0], "end": [1200, 0], "height": 256}
+  ]
+}
+```
+
+Przykładowy obiekt z [examples/sample_project.json](examples/sample_project.json):
+```json
+{
+  "id": "crate_01",
+  "room_id": "room_01",
+  "name": "crate",
+  "x": 400,
+  "y": 50,
+  "z": 0
+}
+```
 
 ### Nieustalone
-- Nie da się ustalić, czy projekt miał używać konkretnego formatu pośredniego lub końcowego dla KF2.
+- Nie ustalono formalnych jednostek, systemu współrzędnych ani zasad rotacji/skali.
+- Nie istnieje osobny format „lokacji” lub „obiektów” poza tymi czterema typami encji.
 
 ### Rekomendowana architektura
-- W przyszłości warto rozdzielić formaty na:
-  - wewnętrzny model generatora,
-  - format pośredni zapisu projektu,
-  - końcowy format eksportu do KF2 lub jego SDK.
-- Wewnętrzny model powinien zawierać obiekty takie jak pomieszczenia, ściany, przejścia, dekoracje, punkty startowe, punkty spawnu i triggery.
+- Docelowo warto rozdzielić format wejściowy, model pośredni i format eksportu tak, aby inne narzędzia nie zależały od wewnętrznego JSON-a projektu.
 
 ## 7. Sposób dodawania elementów mapy
 
 ### Stan obecny
-- Brak implementacji jakiegokolwiek sposobu tworzenia podłoża, ścian, sufitu, drzwi, przejść, schodów, ramp, poziomów wysokości, dekoracji, rekwizytów, świateł, kolizji, punktów startowych graczy, NPC, przeciwników, ścieżek, danych nawigacyjnych, celów, triggerów, dźwięków, efektów lub innych elementów specyficznych dla KF2.
 
-### Stan obecny: brak implementacji
-- Wszystkie wymienione elementy są obecnie nieobsługiwane, ponieważ w repozytorium nie ma kodu ani definicji danych.
+| Element | Stan obecny | Odpowiedzialny kod | Uwagi |
+| --- | --- | --- | --- |
+| Podłoże | brak osobnego modelu | `Room.width`, `Room.depth` w [models.py](src/kf2_env_generator/models.py) | podłoże jest tylko pośrednio reprezentowane przez wymiary pokoju |
+| Ściany | zaimplementowane | `Wall`, `config.load_project()`, `generator.generate_project()` | ściany mają `start`, `end`, `height` |
+| Sufity | brak implementacji | brak | nie ma osobnego obiektu sufitu |
+| Drzwi | brak implementacji | brak | brak modelu przejść jako osobnych encji |
+| Przejścia | brak implementacji | brak | brak topologii połączeń między pokojami |
+| Schody | brak implementacji | brak | brak geometrii wielopoziomowej |
+| Rampy | brak implementacji | brak | brak geometrii pochyłej |
+| Poziomy wysokości | częściowo pośrednio | `Room.height` | to wymiar bryły, nie osobny system pięter |
+| Dekoracje | zaimplementowane | `Decoration`, `decorations` w `Room` | top-level dekoracje są zachowywane w JSON |
+| Rekwizyty | częściowo jako dekoracje | `Decoration` | nie ma osobnej klasy rekwizytów |
+| Światła | zaimplementowane | `Light` | z opcjonalnym `intensity` |
+| Kolizje | brak implementacji | brak | nie ma generatora kolizji |
+| Punkty startowe graczy | zaimplementowane | `SpawnPoint` | walidowane względem istniejących pokoi |
+| NPC | brak implementacji | brak | brak encji AI |
+| Przeciwnicy | brak implementacji | brak | brak systemu spawnów przeciwników |
+| Punkty spawnu | zaimplementowane | `SpawnPoint` | tylko jako proste punkty pozycyjne |
+| Obszary spawnu | brak implementacji | brak | brak objętościowych stref spawnów |
+| Ścieżki | brak implementacji | brak | brak grafu połączeń |
+| Dane nawigacyjne | brak implementacji | brak | brak navmesha |
+| Cele | brak implementacji | brak | brak systemu misji/trygerów celu |
+| Triggery | brak implementacji | brak | brak encji aktywowanych zdarzeń |
+| Elementy interaktywne | brak implementacji | brak | brak interakcji runtime |
+| Dźwięki | brak implementacji | brak | brak powiązania z assetami audio |
+| Efekty | brak implementacji | brak | brak systemu efektów |
+| Elementy specyficzne dla KF2 | brak implementacji | brak | brak jakiejkolwiek warstwy KF2 |
+
+### Nieustalone
+- Nie ma jeszcze żadnego kodu dla geometrii pochodnej, kolizji, nawigacji ani logiki interakcji.
 
 ### Rekomendowana architektura
-- Dla każdej klasy elementów należy dodać osobny moduł lub komponent w generatorze, np.:
-  - generator geometrii pomieszczeń,
-  - system dekoracji,
-  - system spawnów i punktów startowych,
-  - system kolizji i nawigacji,
-  - system eksportu obiektów do formatu pośredniego KF2.
+- Dalszy rozwój powinien dodać osobne generatory dla geometrii, kolizji, dekoracji i integracji z docelowym formatem KF2.
 
 ## 8. Zależności między plikami i modułami
 
 ### Stan obecny
-- Brak zależności między modułami, ponieważ nie ma modułów.
-- Brak importów aplikacyjnych, brak narzędzi zewnętrznych używanych w projekcie.
+- `__main__.py` importuje `main` z `cli.py`.
+- `cli.py` importuje `load_project`, `validate_project` i `generate_project`.
+- `config.py`, `generator.py` i `validation.py` importują `models.py`.
+- `tests/test_pipeline.py` uruchamia CLI jako podproces i sprawdza wygenerowany JSON.
+- Zewnętrzne zależności runtime są praktycznie zerowe: tylko biblioteka standardowa.
+- `pyproject.toml` używa `setuptools` jako backendu build systemu.
 
 ### Diagram Mermaid — zależności obecne
 ```mermaid
 flowchart TD
-    A[.git] --> B[Brak modułów aplikacji]
-    B --> C[Brak generatora]
-    C --> D[Brak eksportera]
+    CLI[cli.py] --> CFG[config.py]
+    CLI --> VAL[validation.py]
+    CLI --> GEN[generator.py]
+
+    CFG --> MOD[models.py]
+    VAL --> MOD
+    GEN --> MOD
+    MAIN[__main__.py] --> CLI
+    TESTS[tests/test_pipeline.py] --> CLI
 ```
 
 ### Nieustalone
-- Nie da się wskazać krytycznych punktów sprzężenia, ponieważ nie ma kodu projektowego.
+- Nie ma cykli zależności w obecnym układzie, ale dalsza rozbudowa może je łatwo wprowadzić, jeśli nie zostanie zachowana separacja modelu i warstw I/O.
 
 ### Rekomendowana architektura
-- Po implementacji należy zachować wyraźne rozdzielenie między:
-  - modelem mapy,
-  - parserem konfiguracji,
-  - generatorem geometrii,
-  - systemem rozmieszczania obiektów,
-  - walidatorem,
-  - eksportem,
-  - integracją z KF2 SDK.
+- Zmiana modelu danych powinna propagować się przez `models.py`, `config.py`, `validation.py` i `generator.py`.
+- Zmiana formatu eksportu powinna dotyczyć głównie warstwy generatora i przyszłego modułu integracji KF2.
 
 ## 9. Uruchamianie projektu
 
 ### Stan obecny
-- Nie znaleziono instrukcji uruchomienia.
-- Nie znaleziono wymagań środowiskowych.
-- Nie znaleziono zależności, zmiennych środowiskowych ani komend startowych.
+- Wymagany jest Python 3.10 lub nowszy, zgodnie z `pyproject.toml`.
+- Build backend: `setuptools`.
+- Pakiet można zainstalować lokalnie w trybie editable przez `pip install -e .`.
+- Główna komenda uruchomienia: `python -m kf2_env_generator <input.json> <output.json>`.
+- Alternatywnie można uruchomić `python -m kf2_env_generator.cli ...`, jeśli `src` jest na ścieżce importu.
+- Wyjście jest wypisywane na stdout; nie ma dedykowanego systemu logów.
+- Plik wyjściowy tworzony jest pod wskazaną ścieżką, a katalog nadrzędny jest tworzony automatycznie.
+- Nie ma osobnej konfiguracji środowiskowej ani zmiennych środowiskowych wymaganych przez aplikację.
+- Testy istnieją w `tests/`, ale `pytest` nie jest zadeklarowany w `pyproject.toml`.
 
 ### Nieustalone
-- Nie da się ustalić, jak uruchomić projekt, ponieważ nie istnieje żadny skrypt startowy ani plik konfiguracji runtime.
+- Nie ma jeszcze oficjalnej komendy dla pełnego pipeline’u KF2, bo taka warstwa nie istnieje.
+- Test `tests/test_pipeline.py` w obecnej postaci wymaga poprawki importu `os`, jeśli ma być uruchamiany bez błędu.
 
 ### Rekomendowana architektura
-- Przyszły generator powinien mieć:
-  - jedno miejsce wejścia, np. skrypt CLI lub punkt wejścia aplikacji,
-  - plik konfiguracyjny wejściowy,
-  - katalog wyjściowy dla wygenerowanych projektów,
-  - logi i pliki tymczasowe z wyraźnie określoną lokalizacją.
+- Jeśli projekt będzie rósł, warto dodać jawny punkt wejścia CLI w `pyproject.toml` oraz osobne zależności dla testów i ewentualnych narzędzi eksportowych.
 
 ## 10. Zapisywanie, eksport i ponowne wczytywanie
 
 ### Stan obecny
-- Nie znaleziono mechanizmu zapisu projektu.
-- Nie znaleziono eksportera do KF2 ani formatu eksportu.
-- Nie znaleziono procesu ponownego wczytywania projektu.
+- Niedokończona mapa nie ma osobnego formatu roboczego; jedynym stanem wejściowym jest JSON projektu.
+- Gotowa mapa jest zapisywana jako znormalizowany JSON przez `generator.generate_project()`.
+- Ponowne wczytanie projektu polega na ponownym uruchomieniu `load_project()` na tym samym lub innym JSON-ie wejściowym.
+- Eksport ma identyczną strukturę logiczną jak wejście, ale wartości liczbowe są serializowane jako `float`.
+- Dane mogą zostać częściowo znormalizowane: np. int → float, tuple → lista w wyjściowym JSON.
+- Nie ma eksportu do formatu KF2 i nie ma procesu otwierania w edytorze silnika.
 
 ### Nieustalone
-- Nie da się ustalić, czy projekt miał obsługiwać odwracalny workflow edycji i eksportu.
+- Nie ma mechanizmu wersjonowania projektu ani migracji między formatami.
 
 ### Rekomendowana architektura
-- Należy wprowadzić osobne etapy:
-  - zapis niekompletnego projektu,
-  - zapis gotowej mapy,
-  - ponowne wczytanie projektu,
-  - eksport do formatu pośredniego,
-  - finalny eksport do KF2 SDK lub narzędzi mapowych.
+- Docelowo trzeba rozdzielić: zapis roboczy, eksport pośredni i eksport końcowy do KF2.
 
 ## 11. Walidacja mapy
 
 ### Stan obecny
-- Brak walidacji danych wejściowych.
-- Brak walidacji geometrii.
-- Brak walidacji kolizji, punktów startowych, spawnu, nawigacji, triggerów lub zgodności eksportu.
+- `config.py` sprawdza poprawność JSON, typów i niektórych ograniczeń strukturalnych.
+- `validation.py` sprawdza:
+  - niepustą nazwę projektu,
+  - dodatnie wymiary pokoju,
+  - zgodność `room_id` dla `SpawnPoint`, `Decoration` i `Light` z istniejącym pokojem.
+- Walidacja jest uruchamiana przed generowaniem przez `cli.py`.
+- Błędy są raportowane jako wyjątki `ConfigError`, `ValidationError` i `GenerationError`, a CLI kończy się kodem `1`.
 
 ### Nieustalone
-- Nie da się ustalić, czy w przyszłości planowano mechanizmy testów jakościowych.
+- Nie ma walidacji nakładania się obiektów, błędnych kolizji, dostępności przestrzeni, połączeń nawigacyjnych ani zgodności z KF2.
+- `room.decorations` i `room.lights` nie są sprawdzane względem top-level obiektów, więc spójność tych referencji pozostaje niezweryfikowana.
 
 ### Rekomendowana architektura
-- W przyszłości walidacja powinna obejmować:
-  - sprawdzanie danych wejściowych,
-  - sprawdzanie połączeń geometrycznych,
-  - wykrywanie nakładających się obiektów,
-  - sprawdzanie punktów startowych i spawnu,
-  - sprawdzanie dostępności obszarów nawigacyjnych,
-  - raportowanie błędów z podziałem na krytyczne i ostrzeżenia.
+- W kolejnym kroku warto dodać osobny walidator geometryczny oraz walidację spójności referencji między `Room` a dekoracjami/światłami.
 
 ## 12. Przykład od początku do końca
 
 ### Stan obecny
-Nie da się pokazać przykładu pełnego procesu, ponieważ:
-- nie ma modelu mapy,
-- nie ma generatora geometrii,
-- nie ma eksportera,
-- nie ma integracji z KF2.
+Możliwy do wykonania rzeczywisty przebieg:
+1. przygotowanie minimalnego JSON-a na podstawie [examples/sample_project.json](examples/sample_project.json),
+2. uruchomienie `python -m kf2_env_generator examples/sample_project.json out/generated_project.json`,
+3. zapis znormalizowanego pliku JSON.
 
-### Przykład możliwy do wykonania na podstawie repozytorium
-- Nie ma takiego przykładu, ponieważ repozytorium nie zawiera żadnej funkcjonalności.
+Przykład kończy się na eksporcie JSON. Nie ma jeszcze kroku uruchomienia w KF2.
+
+### Przykład z repozytorium
+Zestaw obejmuje już:
+- jedno pomieszczenie (`room_01`),
+- cztery ściany obwodu,
+- jedną dekorację (`crate_01`),
+- jedno światło (`light_01`),
+- jeden punkt startowy (`spawn_01`).
 
 ### Rekomendowana architektura
-- Przykład przyszłego workflow powinien obejmować:
-  1. minimalną konfigurację wejściową,
-  2. utworzenie pomieszczenia,
-  3. dodanie podłoża,
-  4. dodanie ścian,
-  5. dodanie przejścia,
-  6. dodanie dekoracji,
-  7. dodanie światła,
-  8. dodanie punktów startowych lub spawnu,
-  9. zapis projektu,
-  10. eksport,
-  11. uruchomienie w KF2.
-- Ten przykładowy workflow nie jest obecnie realizowany w repozytorium.
+- Dopiero po dodaniu warstwy KF2 ten sam przykład powinien być rozszerzony o eksport do formatu docelowego silnika i test uruchomieniowy w środowisku KF2.
 
 ## 13. Mapa orientacyjna dla kolejnego agenta AI
 
 ### Jak rozpocząć poznawanie repozytorium
-1. Zacząć od katalogu głównego repozytorium i sprawdzić, czy pojawiają się pliki projektowe.
-2. Sprawdzić stan Git i historię commitów, jeśli w przyszłości pojawi się kod.
-3. Jeśli projekt zostanie rozbudowany, rozpocząć od plików wejściowych, modelu mapy, generatora geometrii i eksportera.
-
-### Najważniejsze punkty wejścia
-- Brak aktualnych punktów wejścia aplikacji.
-- Brak plików startowych projektu.
-
-### Najważniejsze modele danych
-- Nieustalone, ponieważ nie ma modelu danych w repozytorium.
-
-### Najważniejsze pliki konfiguracyjne
-- Brak.
-
-### Gdzie należałoby dodawać nowe generatory
-- W nowym module generatora geometrii lub osobnych modułach per typ elementu mapy.
-
-### Gdzie zmienia się format danych
-- Nieustalone.
-
-### Gdzie znajduje się walidacja
-- Nieustalone, brak implementacji.
-
-### Gdzie znajduje się eksport
-- Nieustalone, brak implementacji.
-
-### Gdzie rozszerzać eksport do KF2
-- Należy dodać osobny moduł eksportu po stronie formatu pośredniego i integracji z KF2 SDK.
+1. Przeczytać [pyproject.toml](pyproject.toml), aby zrozumieć sposób budowy pakietu.
+2. Przeczytać [src/kf2_env_generator/models.py](src/kf2_env_generator/models.py), aby poznać model danych.
+3. Przeczytać [src/kf2_env_generator/config.py](src/kf2_env_generator/config.py), aby zrozumieć format wejścia.
+4. Przeczytać [src/kf2_env_generator/validation.py](src/kf2_env_generator/validation.py), aby poznać reguły spójności.
+5. Przeczytać [src/kf2_env_generator/generator.py](src/kf2_env_generator/generator.py), aby zobaczyć sposób eksportu.
+6. Przeczytać [src/kf2_env_generator/cli.py](src/kf2_env_generator/cli.py), aby zrozumieć przepływ uruchomienia.
+7. Na końcu sprawdzić [examples/sample_project.json](examples/sample_project.json) i [tests/test_pipeline.py](tests/test_pipeline.py).
 
 ### Pięć najważniejszych plików do przeczytania
-1. [.git](.git) — potwierdza istnienie repozytorium i jego metadanych, ale nie zawiera projektu.
-2. Brak plików źródłowych — aktualnie nie ma obiektu do analizy w zakresie architektury aplikacji.
-3. Brak plików dokumentacyjnych — brak README, AGENTS.md, CONTRIBUTING lub docs.
-4. Brak plików konfiguracyjnych — brak wskazania środowiska uruchomieniowego.
-5. Brak plików map i exportów — brak dowodów na istnienie generatora lub integracji z KF2.
+1. [src/kf2_env_generator/models.py](src/kf2_env_generator/models.py) — centralny model domenowy.
+2. [src/kf2_env_generator/config.py](src/kf2_env_generator/config.py) — definiuje wejście i ograniczenia parsowania.
+3. [src/kf2_env_generator/validation.py](src/kf2_env_generator/validation.py) — pokazuje reguły spójności projektu.
+4. [src/kf2_env_generator/generator.py](src/kf2_env_generator/generator.py) — opisuje aktualny eksport do JSON.
+5. [src/kf2_env_generator/cli.py](src/kf2_env_generator/cli.py) — integruje cały pipeline i pokazuje punkt startowy.
+
+### Gdzie należałoby dodawać nowe generatory
+- Najpierw w osobnych modułach obok `generator.py`, a potem ewentualnie jako podmoduły per typ elementu mapy.
+
+### Gdzie zmienia się format danych
+- W praktyce w `models.py`, `config.py`, `validation.py` i `generator.py`.
+
+### Gdzie znajduje się walidacja
+- Podstawowa walidacja parsowania: `config.py`.
+- Walidacja semantyczna: `validation.py`.
+
+### Gdzie znajduje się eksport
+- `generator.py`.
+
+### Gdzie rozszerzać eksport do KF2
+- Najlepiej dodać nowy moduł, np. `src/kf2_env_generator/kf2_export.py`, który przyjmie model lub format pośredni i przetworzy go do artefaktów KF2.
+
+### Co jest generowane automatycznie i czego nie należy edytować ręcznie
+- `out/` i inne katalogi wynikowe tworzone przez uruchomienie CLI.
+- `__pycache__/`.
+- Pliki wynikowe wygenerowane przez `generator.py`.
+
+### Zasoby zewnętrzne
+- Na ten moment brak zewnętrznych zasobów silnikowych, bibliotek runtime i SDK KF2.
+
+### Obszary wymagające ostrożności
+- `models.py` i `config.py`, bo zmiana schematu wejścia natychmiast wpływa na parser i generator.
+- `validation.py`, bo to tutaj decyzje o dopuszczalności danych zatrzymują pipeline.
 
 ## 14. Braki i kwestie nieustalone
 
 | Brakująca informacja | Miejsce, w którym jej szukano | Wpływ braku tej informacji | Sposób możliwego ustalenia |
 | --- | --- | --- | --- |
-| Istnienie kodu projektu | katalog repozytorium głównego | Nie można opisać architektury aplikacji | Pojawienie się plików źródłowych lub nowego commita |
-| Definicje danych wejściowych | brak plików konfiguracyjnych i przykładowych danych | Nie można opisać formatu wejścia | Dodanie pliku konfiguracyjnego lub dokumentacji |
-| Model mapy i format eksportu | brak plików projektowych | Nie można wskazać przewidywanego formatu końcowego | Implementacja lub dokumentacja architektury |
-| Instrukcje uruchomienia | brak README i skryptów startowych | Nie można uruchomić projektu | Dodanie instrukcji w README lub skrypcie startowym |
-| Integracja z KF2 SDK | brak plików i zależności | Nie można potwierdzić supportu KF2 | Dodanie modułu eksportu i zależności SDK |
+| Jednostki i skala świata | `models.py`, `config.py`, `examples/sample_project.json` | Nie można pewnie interpretować współrzędnych | Doprecyzowanie w dokumentacji lub schemacie formatu |
+| Formalny schemat wejścia | `config.py`, `examples/sample_project.json` | Format może ewoluować bez wersjonowania | Dodanie JSON Schema lub równoważnego opisu |
+| Integracja z KF2 | cały pakiet `src/kf2_env_generator` | Nie ma kroku uruchomienia w grze ani eksportu silnikowego | Dodanie modułu eksportu i dokumentacji KF2 |
+| Walidacja referencji `Room.decorations` / `Room.lights` | `config.py`, `validation.py` | Możliwa niespójność między listą identyfikatorów a obiektami top-level | Rozszerzenie walidatora |
+| Uruchamialność testów | `tests/test_pipeline.py`, `pyproject.toml` | Test pipeline może nie działać bez poprawki importu `os` i bez `pytest` | Naprawa testu i deklaracja zależności testowych |
 
 ## 15. Rekomendowana architektura brakującej części
 
 ### Uwaga
-Ta sekcja opisuje propozycję architektury dla przyszłego generatora środowisk i integracji z KF2. Nie jest to opis obecnego stanu kodu, ponieważ obecny stan nie zawiera takiego systemu.
+Ta sekcja opisuje wyłącznie brakującą warstwę dla pełnej integracji z KF2. Nie jest to opis obecnego kodu.
 
-### 1. Model domenowy mapy
-- Odpowiedzialność: reprezentacja pomieszczeń, ścian, przejść, dekoracji, punktów startowych, spawnu i innych elementów.
-- Dane wejściowe: konfiguracja mapy i definicje obiektów.
-- Dane wyjściowe: wewnętrzny model sceny.
-- Zależności: parser konfiguracji, walidator, generator geometrii.
-- Proponowane miejsce: moduł modelu domenowego w katalogu src/models lub podobnym.
+### 1. Model domenowy rozszerzony
+- Odpowiedzialność: pełny model lokacji, sekcji, przejść, kolizji, spawnów i punktów logicznych.
+- Wejście: obecny JSON projektu.
+- Wyjście: model bogatszy niż obecne `Room`/`Wall`/`Decoration`/`Light`.
+- Proponowane miejsce: nowe moduły obok `models.py`.
 
-### 2. Parser konfiguracji
-- Odpowiedzialność: wczytywanie danych wejściowych z pliku JSON/YAML i tworzenie modelu domenowego.
-- Dane wejściowe: plik konfiguracyjny.
-- Dane wyjściowe: znormalizowany model środowiska.
-- Zależności: model domenowy, walidator.
-- Proponowane miejsce: moduł src/config lub src/parsers.
+### 2. Generator geometrii
+- Odpowiedzialność: budowa podłóg, sufitów, ścian, otworów i brył pomocniczych.
+- Wejście: rozszerzony model domenowy.
+- Wyjście: geometria pośrednia.
+- Proponowane miejsce: `src/kf2_env_generator/geometry/`.
 
-### 3. Generator geometrii
-- Odpowiedzialność: tworzenie podłoża, ścian, sufitu, przejść i innych elementów strukturalnych.
-- Dane wejściowe: model mapy.
-- Dane wyjściowe: geometria sceny.
-- Zależności: model domenowy, walidator.
-- Proponowane miejsce: moduł src/generation/geometry.
+### 3. System rozmieszczania elementów
+- Odpowiedzialność: lokowanie dekoracji, świateł, spawnów i obiektów interaktywnych.
+- Wejście: geometria i model domenowy.
+- Wyjście: lista obiektów sceny.
+- Proponowane miejsce: `src/kf2_env_generator/placement/`.
 
-### 4. System rozmieszczania elementów
-- Odpowiedzialność: rozmieszczanie dekoracji, rekwizytów, świateł i obiektów dynamicznych w wygenerowanej scenie.
-- Dane wejściowe: definicje obiektów i reguły rozmieszczenia.
-- Dane wyjściowe: lista elementów na mapie.
-- Zależności: model domenowy, generator geometrii.
-- Proponowane miejsce: moduł src/generation/placement.
+### 4. Walidator rozszerzony
+- Odpowiedzialność: kolizje, dostępność, referencje, poprawność przestrzenna, reguły KF2.
+- Wejście: model i geometria pośrednia.
+- Wyjście: raport błędów i ostrzeżeń.
+- Proponowane miejsce: `src/kf2_env_generator/validation/`.
 
 ### 5. Rejestr zasobów
-- Odpowiedzialność: zarządzanie modelami, teksturami, dźwiękami, efektami i innymi zasobami używanymi przez środowisko.
-- Dane wejściowe: lista zasobów z konfiguracji.
-- Dane wyjściowe: mapowanie zasobu → identyfikator lub ścieżka.
-- Zależności: parser konfiguracji, exporter.
-- Proponowane miejsce: moduł src/resources lub src/asset_registry.
+- Odpowiedzialność: mapowanie assetów na identyfikatory i ścieżki eksportowe.
+- Wejście: konfiguracja zasobów.
+- Wyjście: uporządkowany katalog assetów.
+- Proponowane miejsce: `src/kf2_env_generator/assets/`.
 
-### 6. Generator kolizji i nawigacji
-- Odpowiedzialność: tworzenie kolizji i danych nawigacyjnych dla środowiska.
-- Dane wejściowe: geometria i lista obiektów.
-- Dane wyjściowe: dane kolizji i nawigacji.
-- Zależności: generator geometrii, system rozmieszczania.
-- Proponowane miejsce: moduł src/generation/collision lub src/navigation.
+### 6. Eksporter pośredni
+- Odpowiedzialność: zapis stabilnego formatu pośredniego przed eksportem do KF2.
+- Wejście: zwalidowany model i geometria pośrednia.
+- Wyjście: format pośredni niezależny od silnika.
+- Proponowane miejsce: `src/kf2_env_generator/export/`.
 
-### 7. Walidator
-- Odpowiedzialność: sprawdzanie poprawności mapy, braków zasobów, nakładających się obiektów i niepoprawnych punktów startowych.
-- Dane wejściowe: model mapy i wygenerowane elementy.
-- Dane wyjściowe: raport błędów i ostrzeżeń.
-- Zależności: wszystkie poprzednie moduły.
-- Proponowane miejsce: moduł src/validation.
+### 7. Integracja z KF2 SDK
+- Odpowiedzialność: przekształcenie formatu pośredniego do artefaktów wymaganych przez KF2 lub narzędzia współpracujące z KF2.
+- Wejście: format pośredni.
+- Wyjście: artefakty docelowe dla KF2.
+- Proponowane miejsce: `src/kf2_env_generator/kf2/`.
 
-### 8. System zapisu projektu
-- Odpowiedzialność: zapis bieżącego stanu projektu w formacie odczytywalnym i możliwym do ponownego wczytania.
-- Dane wejściowe: model mapy i metadane projektu.
-- Dane wyjściowe: plik projektu lub zbiór plików.
-- Zależności: model domenowy, walidator.
-- Proponowane miejsce: moduł src/io lub src/project_io.
+### 8. Raportowanie i logowanie
+- Odpowiedzialność: zbieranie błędów, ostrzeżeń, metryk i śladu wykonania.
+- Wejście: komunikaty z całego pipeline’u.
+- Wyjście: raport lub log procesu.
+- Proponowane miejsce: `src/kf2_env_generator/reporting/`.
 
-### 9. Eksporter do formatu pośredniego
-- Odpowiedzialność: generowanie formatu pośredniego, który można później przekształcić do formatu końcowego.
-- Dane wejściowe: zwalidowany model mapy.
-- Dane wyjściowe: format pośredni (np. JSON, XML lub własny format binarny).
-- Zależności: model domenowy, walidator, rejestr zasobów.
-- Proponowane miejsce: moduł src/export.
-
-### 10. Warstwa integracyjna z KF2 SDK
-- Odpowiedzialność: tłumaczenie formatu pośredniego na format akceptowalny przez KF2 SDK lub narzędzia mapowe.
-- Dane wejściowe: format pośredni.
-- Dane wyjściowe: pliki gotowe do użycia w KF2 lub do dalszego przetwarzania przez SDK.
-- Zależności: exporter, rejestr zasobów.
-- Proponowane miejsce: moduł src/kf2_integration.
-
-### 11. Raportowanie błędów i logowanie
-- Odpowiedzialność: zbieranie błędów, ostrzeżeń i informacji o przebiegu procesu.
-- Dane wejściowe: komunikaty z walidatora, eksportera i integracji.
-- Dane wyjściowe: logi i raporty.
-- Zależności: wszystkie moduły.
-- Proponowane miejsce: moduł src/logging lub src/reporting.
-
-## Podsumowanie
-
-- Obecny stan repozytorium nie zawiera działającego generatora środowisk ani integracji z KF2.
-- Wszystkie elementy związane z mapami, eksportem i KF2 są obecnie brakujące lub nieustalone.
-- Repozytorium może być punktem startowym dla nowej implementacji, ale w obecnej formie nie dostarcza żadnej realnej architektury aplikacji.
+### Podsumowanie
+- Obecny kod daje solidny, działający start dla generatora JSON.
+- Brakuje jeszcze pełnej geometrii, walidacji przestrzennej i szczególnie warstwy eksportu do KF2.
