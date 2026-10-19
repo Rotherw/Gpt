@@ -112,7 +112,7 @@ Gpt/
 - Odpowiedzialność: test uruchamiający CLI jako podproces.
 - Wejście: [examples/sample_project.json](examples/sample_project.json).
 - Wyjście: oczekiwany plik JSON generowany w katalogu tymczasowym.
-- Uwaga: plik odwołuje się do `os.name`, ale nie importuje `os`; test w obecnej postaci wymaga poprawki, aby być w pełni uruchamialny.
+- Test importuje `os` i używa `os.pathsep`, dzięki czemu składa ścieżkę importu poprawnie na Windows i systemach Unix.
 
 ### Nieustalone
 - Nie ma jeszcze podziału na osobne moduły dla geometrii, kolizji, nawigacji, eksportu KF2 ani rejestru zasobów.
@@ -304,11 +304,11 @@ flowchart TD
 - Wyjście jest wypisywane na stdout; nie ma dedykowanego systemu logów.
 - Plik wyjściowy tworzony jest pod wskazaną ścieżką, a katalog nadrzędny jest tworzony automatycznie.
 - Nie ma osobnej konfiguracji środowiskowej ani zmiennych środowiskowych wymaganych przez aplikację.
-- Testy istnieją w `tests/`, ale `pytest` nie jest zadeklarowany w `pyproject.toml`.
+- Zależności testowe są dostępne przez `python -m pip install -e ".[test]"`; testy uruchamia `python -m pytest -q`.
 
 ### Nieustalone
 - Nie ma jeszcze oficjalnej komendy dla pełnego pipeline’u KF2, bo taka warstwa nie istnieje.
-- Test `tests/test_pipeline.py` w obecnej postaci wymaga poprawki importu `os`, jeśli ma być uruchamiany bez błędu.
+- Test `tests/test_pipeline.py` uruchamia CLI i sprawdza wygenerowany plik JSON; poprawka z 2026-10-19 usuwała brak importu `os`.
 
 ### Rekomendowana architektura
 - Jeśli projekt będzie rósł, warto dodać jawny punkt wejścia CLI w `pyproject.toml` oraz osobne zależności dla testów i ewentualnych narzędzi eksportowych.
@@ -422,7 +422,7 @@ Zestaw obejmuje już:
 | Formalny schemat wejścia | `config.py`, `examples/sample_project.json` | Format może ewoluować bez wersjonowania | Dodanie JSON Schema lub równoważnego opisu |
 | Integracja z KF2 | cały pakiet `src/kf2_env_generator` | Nie ma kroku uruchomienia w grze ani eksportu silnikowego | Dodanie modułu eksportu i dokumentacji KF2 |
 | Walidacja referencji `Room.decorations` / `Room.lights` | `config.py`, `validation.py` | Możliwa niespójność między listą identyfikatorów a obiektami top-level | Rozszerzenie walidatora |
-| Uruchamialność testów | `tests/test_pipeline.py`, `pyproject.toml` | Test pipeline może nie działać bez poprawki importu `os` i bez `pytest` | Naprawa testu i deklaracja zależności testowych |
+| Uruchamialność testów | `tests/test_pipeline.py`, `pyproject.toml` | Naprawiono import `os` i dodano zależności testowe (2026-10-19) | `python -m pip install -e ".[test]"`, następnie `python -m pytest -q` |
 
 ## 15. Rekomendowana architektura brakującej części
 

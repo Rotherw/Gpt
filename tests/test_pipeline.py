@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -10,8 +11,8 @@ def test_end_to_end_pipeline(tmp_path):
     input_path = ROOT / "examples" / "sample_project.json"
     output_path = tmp_path / "generated_project.json"
 
-    env = dict(__import__("os").environ)
-    env["PYTHONPATH"] = str(ROOT / "src") + (";" if os.name == "nt" else ":") + env.get("PYTHONPATH", "")
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(ROOT / "src") + os.pathsep + env.get("PYTHONPATH", "")
 
     result = subprocess.run(
         [sys.executable, "-m", "kf2_env_generator.cli", str(input_path), str(output_path)],
