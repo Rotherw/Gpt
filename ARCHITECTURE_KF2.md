@@ -1,12 +1,12 @@
-# ARCHITEKTURA PROJEKTU I INTEGRACJA Z KILLING FLOOR 2
+# ARCHITEKTURA PROJEKTU I INTEGRACJA Z KRONIKAMI FALLATHANU (KF2)
 
 - Nazwa repozytorium: Gpt
 - Aktywna gałąź: main
 - Data analizy: 2026-07-21
 - Zakres analizy: aktualne pliki repozytorium, w szczególności pakiet `src/kf2_env_generator`, `examples`, `tests` i `pyproject.toml`; bez instalowania nowych zależności i bez uruchamiania buildów
-- Krótkie podsumowanie stanu projektu: repozytorium zawiera już działający minimalny generator środowisk w Pythonie. Generator wczytuje JSON z opisem projektu, buduje model danych, waliduje odniesienia między encjami i zapisuje znormalizowany JSON wyjściowy. Nie ma jeszcze integracji z Killing Floor 2 ani z KF2 SDK.
+- Krótkie podsumowanie stanu projektu: repozytorium zawiera już działający minimalny generator środowisk w Pythonie. Generator wczytuje JSON z opisem projektu, buduje model danych, waliduje odniesienia między encjami i zapisuje znormalizowany JSON wyjściowy. Nie ma jeszcze integracji z Kronikami Fallathanu ani z zewnętrznym SDK.
 - Znaleziono działający generator środowisk: Tak, w zakresie generowania i walidacji projektu JSON
-- Znaleziono rzeczywistą integrację z KF2 lub KF2 SDK: Nie
+- Znaleziono rzeczywistą integrację z KF2 lub zewnętrznym SDK: Nie
 
 ## 1. Cel i zakres projektu
 
@@ -160,7 +160,7 @@ flowchart LR
     B --> C[validation.validate_project]
     C --> D[generator.generate_project]
     D --> E[Znormalizowany JSON wyjściowy]
-    E -. brak .-> F[Integracja z KF2 / KF2 SDK]
+    E -. brak .-> F[Integracja z KF2 / zewnętrznym SDK]
 
     subgraph Istniejący przepływ
         A --> B --> C --> D --> E
@@ -175,7 +175,7 @@ flowchart LR
 - Nie ma jeszcze etapu budowy geometrii silnikowej, eksportu do formatu KF2 ani uruchomienia w grze.
 
 ### Rekomendowana architektura
-- Następnym krokiem powinien być oddzielny etap eksportu do formatu pośredniego, a dopiero potem warstwa mapowania do KF2 SDK.
+- Następnym krokiem powinien być oddzielny etap eksportu do formatu pośredniego, a dopiero potem warstwa mapowania do zewnętrznego SDK.
 
 ## 6. Model mapy i formaty danych
 
@@ -465,7 +465,7 @@ Ta sekcja opisuje wyłącznie brakującą warstwę dla pełnej integracji z KF2.
 - Wyjście: format pośredni niezależny od silnika.
 - Proponowane miejsce: `src/kf2_env_generator/export/`.
 
-### 7. Integracja z KF2 SDK
+### 7. Integracja z zewnętrznym SDK
 - Odpowiedzialność: przekształcenie formatu pośredniego do artefaktów wymaganych przez KF2 lub narzędzia współpracujące z KF2.
 - Wejście: format pośredni.
 - Wyjście: artefakty docelowe dla KF2.
